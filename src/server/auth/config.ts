@@ -1,6 +1,6 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import GoogleProvider from "next-auth/providers/google";
 
 import { db } from "@/server/db";
 import {
@@ -9,6 +9,7 @@ import {
   users,
   verificationTokens,
 } from "@/server/db/schema";
+import { env } from "@/env";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -31,6 +32,9 @@ declare module "next-auth" {
   // }
 }
 
+// Whitelist of allowed emails
+const ALLOWED_EMAILS = ["marcel.bilski@anzuro.com", "mvrxel@gmail.com"];
+
 /**
  * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
  *
@@ -38,7 +42,10 @@ declare module "next-auth" {
  */
 export const authConfig = {
   providers: [
-    DiscordProvider,
+    GoogleProvider({
+      clientId: env.AUTH_GOOGLE_ID,
+      clientSecret: env.AUTH_GOOGLE_SECRET,
+    }),
     /**
      * ...add more providers here.
      *
@@ -63,5 +70,8 @@ export const authConfig = {
         id: user.id,
       },
     }),
+    signIn: ({ user }) => {
+      return true;
+    },
   },
 } satisfies NextAuthConfig;
