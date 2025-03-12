@@ -6,7 +6,9 @@ import {
   primaryKey,
   text,
   timestamp,
+  uuid,
   varchar,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { type AdapterAccount } from "next-auth/adapters";
 
@@ -30,13 +32,13 @@ export const posts = createTable(
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
-      () => new Date()
+      () => new Date(),
     ),
   },
   (example) => ({
     createdByIdIdx: index("created_by_idx").on(example.createdById),
     nameIndex: index("name_idx").on(example.name),
-  })
+  }),
 );
 
 export const users = createTable("user", {
@@ -83,7 +85,7 @@ export const accounts = createTable(
       columns: [account.provider, account.providerAccountId],
     }),
     userIdIdx: index("account_user_id_idx").on(account.userId),
-  })
+  }),
 );
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -106,7 +108,7 @@ export const sessions = createTable(
   },
   (session) => ({
     userIdIdx: index("session_user_id_idx").on(session.userId),
-  })
+  }),
 );
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -125,5 +127,75 @@ export const verificationTokens = createTable(
   },
   (vt) => ({
     compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
-  })
+  }),
 );
+
+export const chat = createTable("chat", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 255 })
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});
+
+export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
+
+export const chatRelations = relations(chat, ({ many }) => ({
+  messages: many(message),
+}));
+
+export const message = createTable("message", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  chatId: uuid("chat_id")
+    .notNull()
+    .references(() => chat.id),
+  content: text("content").notNull(),
+  role: messageRoleEnum("role").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+
+export const messageRelations = relations(message, ({ one, many }) => ({
+  chat: one(chat, { fields: [message.chatId], references: [chat.id] }),
+  products: many(product, {
+    relationName: "products",
+  }),
+}));
+
+export const product = createTable("product", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  messageId: uuid("message_id")
+    .notNull()
+    .references(() => message.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  price: integer("price").notNull(),
+  store_name: varchar("store_name", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+  url: varchar("url", { length: 255 }).notNull(),
+  imageUrl: varchar("image_url", { length: 255 }).notNull(),
+});
+
+export const productRelations = relations(product, ({ one }) => ({
+  message: one(message, {
+    fields: [product.messageId],
+    references: [message.id],
+  }),
+}));
