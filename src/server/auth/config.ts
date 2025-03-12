@@ -71,7 +71,10 @@ export const authConfig = {
       },
     }),
     signIn: ({ user }) => {
-      return true;
+      if (user.email && ALLOWED_EMAILS.includes(user.email)) {
+        return true;
+      }
+      return false;
     },
   },
 } satisfies NextAuthConfig;
