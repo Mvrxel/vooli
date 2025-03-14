@@ -17,6 +17,9 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    OPENAI_API_KEY: z.string(),
+    TAVILY_API_KEY: z.string(),
+    TRIGGER_SECRET_KEY: z.string(),
   },
 
   /**
@@ -38,6 +41,9 @@ export const env = createEnv({
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+    TRIGGER_SECRET_KEY: process.env.TRIGGER_SECRET_KEY,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
