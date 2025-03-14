@@ -134,6 +134,7 @@ export const chat = createTable("chat", {
   id: uuid("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }),
   userId: varchar("user_id", { length: 255 })
     .notNull()
     .references(() => users.id),
@@ -170,6 +171,9 @@ export const messageRelations = relations(message, ({ one, many }) => ({
   products: many(product, {
     relationName: "products",
   }),
+  tasks: many(task, {
+    relationName: "tasks",
+  }),
 }));
 
 export const product = createTable("product", {
@@ -197,5 +201,75 @@ export const productRelations = relations(product, ({ one }) => ({
   message: one(message, {
     fields: [product.messageId],
     references: [message.id],
+  }),
+}));
+
+export const task = createTable("task", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  messageId: uuid("message_id")
+    .notNull()
+    .references(() => message.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+  token: varchar("token", { length: 255 }).notNull(),
+  runId: varchar("run_id", { length: 255 }).notNull(),
+});
+
+export const taskRelations = relations(task, ({ one }) => ({
+  message: one(message, { fields: [task.messageId], references: [message.id] }),
+}));
+
+export const taskStatusEnum = pgEnum("task_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const taskJob = createTable("task_job", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: uuid("task_id")
+    .notNull()
+    .references(() => task.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: taskStatusEnum("status").notNull(),
+});
+
+export const taskJobSources = createTable("task_job_sources", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskJobId: uuid("task_job_id")
+    .notNull()
+    .references(() => taskJob.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  url: varchar("url", { length: 255 }).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});
+
+export const taskJobRelations = relations(taskJob, ({ one, many }) => ({
+  task: one(task, { fields: [taskJob.taskId], references: [task.id] }),
+  sources: many(taskJobSources, {
+    relationName: "sources",
   }),
 }));

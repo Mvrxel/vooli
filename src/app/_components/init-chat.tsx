@@ -1,12 +1,30 @@
 "use client";
 
+import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import EnhancedTextarea from "./enhanced-textarea";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { api } from "@/trpc/react";
+import { Send } from "lucide-react";
 
 export function InitChat() {
+  const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [message, setMessage] = useState("");
+
+  // Create chat mutation
+  const createChatMutation = api.chat.createChat.useMutation({
+    onSuccess: (data) => {
+      // Navigate to the new chat page
+      router.push(`/chat/${data.chat.id}`);
+    },
+    onError: (error) => {
+      console.error("Error creating chat:", error);
+      setIsCreatingChat(false);
+    },
+  });
 
   const handleSignOut = async () => {
     try {
@@ -15,6 +33,26 @@ export function InitChat() {
     } catch (error) {
       console.error("Error signing out:", error);
       setIsSigningOut(false);
+    }
+  };
+
+  const handleCreateChat = async () => {
+    if (!message.trim() || isCreatingChat) return;
+
+    try {
+      setIsCreatingChat(true);
+
+      // Create a new chat with the user's message
+      await createChatMutation.mutateAsync({
+        message: message.trim(),
+        name: `Chat ${new Date().toLocaleString()}`, // Default name based on date/time
+      });
+
+      // Note: No need to clear the message or set isCreatingChat to false here
+      // as we'll be navigating away from this page on success
+    } catch (error) {
+      console.error("Error creating chat:", error);
+      setIsCreatingChat(false);
     }
   };
 
@@ -41,7 +79,25 @@ export function InitChat() {
             </h2>
           </div>
 
-          <EnhancedTextarea />
+          <EnhancedTextarea
+            placeholder="What can I find for you?"
+            initialValue={message}
+            onValueChange={setMessage}
+            onButtonClick={handleCreateChat}
+            buttonIcon={
+              isCreatingChat ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )
+            }
+          />
+
+          {isCreatingChat && (
+            <p className="text-center text-sm text-gray-500">
+              Creating your chat...
+            </p>
+          )}
         </div>
       </div>
     </main>
