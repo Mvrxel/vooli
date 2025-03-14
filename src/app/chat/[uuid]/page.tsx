@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/trpc/react";
 import EnhancedTextarea from "@/app/_components/enhanced-textarea";
@@ -16,7 +16,7 @@ interface Product {
   id: string;
   name: string;
   description: string;
-  price: number;
+  price: string;
   store_name: string | null;
   url: string;
   imageUrl: string;
@@ -31,6 +31,8 @@ interface Message {
 
 export default function ChatPage() {
   const params = useParams<{ uuid: string }>();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const chatId = params.uuid;
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,7 @@ export default function ChatPage() {
   const [publicAccessToken, setPublicAccessToken] = useState<string | null>(
     null,
   );
+  const [initialMessageSent, setInitialMessageSent] = useState(false);
   const utils = api.useUtils();
 
   // Fetch chat messages
@@ -69,10 +72,52 @@ export default function ChatPage() {
 
   // Send message mutation
   const sendMessageMutation = api.chat.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setTriggerRunId(result.runId ?? null);
+      setPublicAccessToken(result.token ?? null);
       void refetch();
     },
+    onError: (error) => {
+      console.error("Error sending message:", error);
+      setIsSending(false);
+    },
   });
+
+  // Check for init_msg parameter and send initial message if chat is empty
+  useEffect(() => {
+    if (chatId && !initialMessageSent && !isLoading && data) {
+      // Check if chat is empty (no messages)
+      if (data.messages.length === 0) {
+        // Check for init_msg parameter
+        const initMsg = searchParams.get("init_msg");
+        if (initMsg) {
+          // Send the initial message
+          setIsSending(true);
+          void sendMessageMutation.mutateAsync({
+            chatId,
+            content: initMsg,
+            role: "user",
+          });
+
+          // Remove the init_msg parameter from URL
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, "", newUrl);
+
+          setInitialMessageSent(true);
+        }
+      } else {
+        // Chat already has messages, mark as initialized
+        setInitialMessageSent(true);
+      }
+    }
+  }, [
+    chatId,
+    data,
+    initialMessageSent,
+    isLoading,
+    searchParams,
+    sendMessageMutation,
+  ]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -98,14 +143,12 @@ export default function ChatPage() {
       setIsSending(true);
 
       // Send the user message
-      const result = await sendMessageMutation.mutateAsync({
+      await sendMessageMutation.mutateAsync({
         chatId,
         content: newMessage,
         role: "user",
       });
-      setTriggerRunId(result.runId ?? null);
-      setPublicAccessToken(result.token ?? null);
-      void utils.chat.getChatMessages.invalidate({ chatId });
+
       // Clear the input
       setNewMessage("");
     } catch (error) {
@@ -187,7 +230,7 @@ export default function ChatPage() {
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {message.role === "user" ? (
-                <div className="max-w-[80%] rounded-2xl bg-blue-600 p-4 text-white">
+                <div className="max-w-[80%] rounded-2xl bg-black p-4 text-white">
                   <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
               ) : (

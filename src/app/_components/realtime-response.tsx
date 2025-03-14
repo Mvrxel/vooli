@@ -130,14 +130,14 @@ export function RealtimeResponse({
           </div>
         </div>
       )}
-      <div>
+      {/* <div>
         {displayText && (
           <div>
             <h3 className="mb-2 text-sm font-medium">Answer:</h3>
             <MemoizedMarkdown content={displayText} id={run.id} />
           </div>
         )}
-      </div>
+      </div> */}
       {/* Show run ID for debugging */}
       <div className="text-xs text-gray-400">Run ID: {run.id}</div>
     </div>

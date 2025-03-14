@@ -20,6 +20,7 @@ export const env = createEnv({
     OPENAI_API_KEY: z.string(),
     TAVILY_API_KEY: z.string(),
     TRIGGER_SECRET_KEY: z.string(),
+    FIRECRAFT_API_KEY: z.string(),
   },
 
   /**
@@ -44,6 +45,7 @@ export const env = createEnv({
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     TRIGGER_SECRET_KEY: process.env.TRIGGER_SECRET_KEY,
+    FIRECRAFT_API_KEY: process.env.FIRECRAFT_API_KEY,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

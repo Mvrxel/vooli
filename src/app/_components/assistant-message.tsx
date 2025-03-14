@@ -9,7 +9,7 @@ interface Product {
   id: string;
   name: string;
   description: string;
-  price: number;
+  price: string;
   store_name: string | null;
   url: string;
   imageUrl: string;
@@ -77,7 +77,7 @@ export function AssistantMessage({
                       {product.description}
                     </p>
                     <div className="text-sm font-semibold text-emerald-600">
-                      ${(product.price / 100).toFixed(2)}
+                      {product.price}
                     </div>
                   </CardContent>
                 </a>

@@ -185,7 +185,7 @@ export const product = createTable("product", {
     .references(() => message.id),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description").notNull(),
-  price: integer("price").notNull(),
+  price: varchar("price").notNull(),
   store_name: varchar("store_name", { length: 255 }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .default(sql`CURRENT_TIMESTAMP`)

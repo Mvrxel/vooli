@@ -1,20 +1,20 @@
-import { schemaTask, metadata } from "@trigger.dev/sdk/v3";
+import { schemaTask, metadata, queue } from "@trigger.dev/sdk/v3";
 import { openai } from "@ai-sdk/openai";
-import {
-  generateText,
-  generateObject,
-  streamText,
-  type TextStreamPart,
-} from "ai";
+import { generateObject, streamText, type TextStreamPart } from "ai";
 import { tavily, type TavilySearchResponse } from "@tavily/core";
-import { drizzle } from "drizzle-orm/postgres-js";
 import { db } from "@/server/db";
 import { message, product } from "@/server/db/schema";
 import { z } from "zod";
+import FirecrawlApp from "@mendable/firecrawl-js";
 
 export type STREAMS = {
   response: TextStreamPart<{}>;
 };
+
+export const productQueue = queue({
+  name: "product",
+  concurrencyLimit: 10,
+});
 
 export const chatTask = schemaTask({
   id: "chat",
@@ -70,7 +70,7 @@ export const chatTask = schemaTask({
       const result = streamText({
         model: openai("gpt-4o-mini"),
         prompt: `
-        You are a helpful assistant for a shopping assistant. You will be given a list of product search results and you will need to summarize the search results into a single search result.
+        You are a helpful assistant for a shopping assistant. You will be given a list of product search results and you will need to summarize the search results into a single search result. Response with language that user used to ask question.
 
         User Message:
         ${payload.message}
@@ -82,7 +82,10 @@ export const chatTask = schemaTask({
         ${productSearchResultsData.map((result) => result.results.map((r) => `Title: ${r.title}\nAnswer: ${r.url}`).join("\n")).join("\n")}    
         `,
       });
-      metadata.set("status", "sending-response");
+      metadata.set(
+        "status",
+        "collecting-products-and-generating-perfect-response",
+      );
       metadata.set("products", productSearchResultsData);
       await metadata.stream("response", result.fullStream);
       const text = await result.text;
@@ -102,21 +105,16 @@ export const chatTask = schemaTask({
             return "I'm sorry, I couldn't send the response.";
           }
           try {
-            // Flatten the nested arrays with flatMap
-            const productEntries = productSearchResultsData.flatMap((result) =>
-              result.results.map((r) => ({
-                name: r.title,
-                url: r.url,
-                description: "",
-                price: 0,
-                imageUrl: "",
-                messageId: messageId,
-              })),
+            await getProductInfoTask.batchTriggerAndWait(
+              productSearchResultsData.flatMap((result) =>
+                result.results.map((r) => ({
+                  payload: {
+                    messageId,
+                    url: r.url,
+                  },
+                })),
+              ),
             );
-
-            if (productEntries.length > 0) {
-              await db.insert(product).values(productEntries);
-            }
           } catch (error) {
             console.error("Failed to insert products into database:", error);
           }
@@ -130,6 +128,87 @@ export const chatTask = schemaTask({
       };
     }
     return "I'm sorry, I don't understand your message.";
+  },
+});
+
+export const getProductInfoTask = schemaTask({
+  id: "get-product-info",
+  queue: productQueue,
+  schema: z.object({
+    messageId: z.string(),
+    url: z.string(),
+  }),
+  run: async (payload) => {
+    const { url } = payload;
+    const firecrawl = new FirecrawlApp({
+      apiKey: process.env.FIRECRAFT_API_KEY,
+    });
+
+    const scrape = await firecrawl.scrapeUrl(url, {
+      formats: ["markdown"],
+    });
+
+    if (!scrape.success) {
+      console.error(`Failed to scrape: ${scrape.error}`);
+      return { error: scrape.error };
+    }
+
+    const { object: scrapeResult } = await generateObject({
+      model: openai("o3-mini"),
+      prompt: `Extract the product information from the following markdown: ${scrape.markdown}`,
+      schema: z.object({
+        product_name: z.string().describe("The name of the product"),
+        product_description: z
+          .string()
+          .describe("The description of the product"),
+        product_price: z
+          .string()
+          .describe("The price of the product with currency"),
+        product_image_url: z.string().describe("The image url of the product"),
+      }),
+    });
+
+    // const scrapeResult = await firecrawl.extract([url], {
+    //   prompt: "Extract the product information from store page",
+    //   schema: z.object({
+    //     product_name: z.string(),
+    //     product_description: z.string(),
+    //     product_price: z.number(),
+    //     product_image_url: z.string(),
+    //   }),
+    // });
+
+    try {
+      // Check if scrapeResult has the expected properties
+      if (
+        "product_name" in scrapeResult &&
+        "product_description" in scrapeResult &&
+        "product_price" in scrapeResult &&
+        "product_image_url" in scrapeResult
+      ) {
+        // Type assertion to help TypeScript understand the structure
+        const typedResult = scrapeResult as {
+          product_name: string;
+          product_description: string;
+          product_price: string;
+          product_image_url: string;
+        };
+
+        await db.insert(product).values({
+          messageId: payload.messageId,
+          name: typedResult.product_name,
+          description: typedResult.product_description,
+          price: typedResult.product_price,
+          imageUrl: typedResult.product_image_url,
+          url: url,
+        });
+      } else {
+        console.error("Invalid scrape result format:", scrapeResult);
+      }
+    } catch (error) {
+      console.error("Failed to insert products into database:", error);
+    }
+    return scrapeResult;
   },
 });
 
@@ -228,14 +307,35 @@ export const searchProductTask = schemaTask({
   },
 });
 
-export const testDrizzle = schemaTask({
-  id: "test-drizzle",
+export const testTask = schemaTask({
+  id: "test",
   schema: z.object({
-    message: z.string(),
+    url: z.string(),
   }),
   run: async (payload) => {
-    const result = await db.select().from(message);
-    console.log(result);
-    return result;
+    const { url } = payload;
+    const app = new FirecrawlApp({
+      apiKey: process.env.FIRECRAFT_API_KEY,
+    });
+    const schema = z.object({
+      company_mission: z.string(),
+      supports_sso: z.boolean(),
+      is_open_source: z.boolean(),
+      is_in_yc: z.boolean(),
+    });
+
+    const scrapeResult = await app.extract(["https://firecrawl.dev/"], {
+      prompt:
+        "Extract the company mission, whether it supports SSO, whether it is open source, and whether it is in Y Combinator from the page.",
+      schema: schema,
+    });
+
+    if (!scrapeResult.success) {
+      console.error(`Failed to scrape: ${scrapeResult.error}`);
+      return { error: scrapeResult.error };
+    }
+
+    console.log(scrapeResult.data);
+    return scrapeResult;
   },
 });

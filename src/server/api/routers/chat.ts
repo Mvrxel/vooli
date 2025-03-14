@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { type chatTask, type testDrizzle } from "@/trigger/chat";
+import { type chatTask, type testTask } from "@/trigger/chat";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { chat, message, product } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export const chatRouter = createTRPCRouter({
-  // Create a new chat with the first user message
+  // Create a new chat with optional first user message
   createChat: protectedProcedure
     .input(
       z.object({
-        message: z.string().min(1, "Message cannot be empty"),
+        message: z.string().min(1, "Message cannot be empty").optional(),
         name: z.string().optional(),
       }),
     )
@@ -22,7 +22,7 @@ export const chatRouter = createTRPCRouter({
           .insert(chat)
           .values({
             userId: ctx.session.user.id,
-            name: input.name ?? "New Chat", // Default name if not provided
+            name: input.message,
           })
           .returning();
 
@@ -33,15 +33,19 @@ export const chatRouter = createTRPCRouter({
           });
         }
 
-        // Add the first user message
-        const [newMessage] = await ctx.db
-          .insert(message)
-          .values({
-            chatId: newChat.id,
-            content: input.message,
-            role: "user",
-          })
-          .returning();
+        // Add the first user message if provided
+        let newMessage = null;
+        if (input.message) {
+          const [messageRecord] = await ctx.db
+            .insert(message)
+            .values({
+              chatId: newChat.id,
+              content: input.message,
+              role: "user",
+            })
+            .returning();
+          newMessage = messageRecord;
+        }
 
         return {
           chat: newChat,

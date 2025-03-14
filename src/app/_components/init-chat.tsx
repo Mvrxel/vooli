@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import EnhancedTextarea from "./enhanced-textarea";
 import { signOut } from "next-auth/react";
@@ -17,8 +17,14 @@ export function InitChat() {
   // Create chat mutation
   const createChatMutation = api.chat.createChat.useMutation({
     onSuccess: (data) => {
-      // Navigate to the new chat page
-      router.push(`/chat/${data.chat.id}`);
+      // Navigate to the new chat page with the initial message as a URL parameter
+      if (message.trim()) {
+        router.push(
+          `/chat/${data.chat.id}?init_msg=${encodeURIComponent(message.trim())}`,
+        );
+      } else {
+        router.push(`/chat/${data.chat.id}`);
+      }
     },
     onError: (error) => {
       console.error("Error creating chat:", error);
@@ -42,14 +48,10 @@ export function InitChat() {
     try {
       setIsCreatingChat(true);
 
-      // Create a new chat with the user's message
+      // Create a new chat without an initial message
       await createChatMutation.mutateAsync({
-        message: message.trim(),
         name: `Chat ${new Date().toLocaleString()}`, // Default name based on date/time
       });
-
-      // Note: No need to clear the message or set isCreatingChat to false here
-      // as we'll be navigating away from this page on success
     } catch (error) {
       console.error("Error creating chat:", error);
       setIsCreatingChat(false);
