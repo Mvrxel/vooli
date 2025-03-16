@@ -1,0 +1,116 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Before diving into the best practices, please note that you may need to adapt the globs depending on your project's specific structure and file types.
+
+---
+name: nextjs-best-practices.mdc
+description: Best practices for Next.js applications and routing
+globs: **/*.{ts,tsx}
+---
+
+- Use the App Router for improved performance and simpler data fetching.
+- Implement server-side rendering for better SEO and initial load performance.
+- Utilize Next.js built-in image optimization for faster image loading.
+- Leverage Next.js middleware for authentication and redirects.
+
+---
+name: typescript-best-practices.mdc 
+description: TypeScript coding standards and type safety guidelines
+globs: **/*.{ts,tsx}
+---
+
+- Enable strict mode in your `tsconfig.json` for enhanced type checking.
+- Use type inference where possible to reduce redundancy.
+- Leverage utility types like `Partial`, `Readonly`, and `Pick` for more flexible type definitions.
+- Implement custom type guards for runtime type checking.
+
+---
+name: react-best-practices.mdc
+description: Best practices for React development
+globs: **/*.{tsx,jsx}
+---
+
+- Use functional components with hooks instead of class components.
+- Implement proper state management using `useState` or external libraries like Redux.
+- Utilize `useEffect` for side effects, ensuring cleanup functions are used when necessary.
+- Leverage memoization with `useMemo` and `useCallback` for performance optimization.
+
+---
+name: tailwindcss-best-practices.mdc
+description: Best practices for using Tailwind CSS
+globs: **/*.{tsx,jsx,css}
+---
+
+- Use utility classes directly in your JSX for faster development and easier maintenance.
+- Create custom components with pre-defined Tailwind classes for reusability.
+- Utilize the `@apply` directive in custom CSS to combine multiple utility classes.
+- Ensure responsive design by using Tailwind's responsive utility classes.
+
+---
+name: react-query-best-practices.mdc
+description: Best practices for using React Query
+globs: **/*.{tsx,jsx}
+---
+
+- Use `useQuery` for fetching data and managing loading states.
+- Implement `useMutation` for handling side effects like API calls.
+- Utilize query keys effectively for caching and refetching data.
+- Leverage `queryClient` for managing global query states and invalidations.
+
+---
+name: drizzle-orm-best-practices.mdc
+description: Best practices for using Drizzle ORM with PostgreSQL
+globs: **/*.{ts,tsx}
+---
+
+- Use type-safe queries with Drizzle's TypeScript support.
+- Implement migrations using Drizzle Kit for database schema management.
+- Utilize Drizzle's query builder for complex queries and better performance.
+- Leverage Drizzle's transaction support for maintaining data integrity.
+
+---
+name: zod-best-practices.mdc
+description: Best practices for using Zod for schema validation
+globs: **/*.{ts,tsx}
+---
+
+- Define schemas for all incoming data to ensure type safety and validation.
+- Use Zod's inferred types to automatically generate TypeScript types from schemas.
+- Implement custom validation rules using Zod's `refine` method.
+- Utilize Zod's integration with other libraries like React Hook Form for seamless form validation.
+
+---
+name: react-hook-form-best-practices.mdc
+description: Best practices for using React Hook Form
+globs: **/*.{tsx,jsx}
+---
+
+- Use the `useForm` hook for managing form state and validation.
+- Implement custom validation rules using the `register` function.
+- Utilize the `Controller` component for integrating with UI libraries.
+- Leverage the `useFormContext` hook for sharing form state across components.
+
+---
+name: next-auth-best-practices.mdc
+description: Best practices for using NextAuth.js for authentication
+globs: **/*.{ts,tsx}
+---
+
+- Use the `[...nextauth].ts` API route for handling authentication requests.
+- Implement custom providers for integrating with external authentication services.
+- Utilize session management with `useSession` hook for accessing user data.
+- Leverage NextAuth's built-in JWT support for stateless authentication.
+
+---
+name: trpc-best-practices.mdc
+description: Best practices for using tRPC for type-safe APIs
+globs: **/*.{ts,tsx}
+---
+
+- Define your API routes using tRPC's router system for type safety.
+- Use tRPC's `createTRPCProxyClient` for client-side API calls.
+- Implement input validation using Zod schemas within your tRPC procedures.
+- Leverage tRPC's integration with React Query for seamless data fetching and caching.

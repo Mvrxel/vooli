@@ -1,9 +1,10 @@
 import { schemaTask, metadata, queue } from "@trigger.dev/sdk/v3";
+import { eq } from "drizzle-orm";
 import { openai } from "@ai-sdk/openai";
 import { generateObject, streamText, type TextStreamPart } from "ai";
 import { tavily, type TavilySearchResponse } from "@tavily/core";
 import { db } from "@/server/db";
-import { message, product } from "@/server/db/schema";
+import { message, product, sources } from "@/server/db/schema";
 import { z } from "zod";
 import FirecrawlApp from "@mendable/firecrawl-js";
 
@@ -24,6 +25,23 @@ export const chatTask = schemaTask({
   }),
   run: async (payload) => {
     metadata.set("status", "understanding-message");
+
+    const newMessage = await db
+      .insert(message)
+      .values({
+        chatId: payload.chatId,
+        content: "Generating response...",
+        role: "assistant",
+      })
+      .returning();
+
+    if (!newMessage || newMessage.length === 0) {
+      throw new Error("Failed to get message id");
+    }
+    const messageId = newMessage[0]?.id;
+    if (!messageId) {
+      throw new Error("Failed to get message id");
+    }
     const understand = await understendMessageTask.triggerAndWait({
       message: payload.message,
     });
@@ -39,8 +57,21 @@ export const chatTask = schemaTask({
       if (!searchResults.ok) {
         return "I'm sorry, I couldn't find any product reviews.";
       }
+      metadata.set("sources", searchResults.output.results);
       metadata.set("status", "getting-product-queries");
       const { results } = searchResults.output;
+      await Promise.all(
+        results.flatMap((result) =>
+          result.results.map((item) =>
+            db.insert(sources).values({
+              messageId: messageId,
+              url: item.url,
+              // @ts-expect-error - answer is not always available
+              description: item.answer ?? "",
+            }),
+          ),
+        ),
+      );
       const productQueries = await getProductQueriesTask.triggerAndWait({
         reviews: results.map((result) => result.answer) as string[],
       });
@@ -56,17 +87,28 @@ export const chatTask = schemaTask({
         return "I'm sorry, I couldn't find any product search results.";
       }
 
+      const { results: productSearchResultsDataRes } =
+        productSearchResults.output;
+      let productSearchResultsData = productSearchResultsDataRes;
+      if (productSearchResultsData.length > 5) {
+        productSearchResultsData = productSearchResultsData.slice(0, 5);
+      }
+      metadata.set("products", productSearchResultsData);
       metadata.set("status", "generating-response");
-      const { results: productSearchResultsData } = productSearchResults.output;
-      console.log(
-        productSearchResultsData
-          .map((result) =>
-            result.results
-              .map((r) => `Title: ${r.title}\nAnswer: ${r.url}`)
-              .join("\n"),
-          )
-          .join("\n"),
-      );
+      try {
+        await getProductInfoTask.batchTriggerAndWait(
+          productSearchResultsData.flatMap((result) =>
+            result.results.map((r) => ({
+              payload: {
+                messageId,
+                url: r.url,
+              },
+            })),
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to insert products into database:", error);
+      }
       const result = streamText({
         model: openai("gpt-4o-mini"),
         prompt: `
@@ -86,42 +128,15 @@ export const chatTask = schemaTask({
         "status",
         "collecting-products-and-generating-perfect-response",
       );
-      metadata.set("products", productSearchResultsData);
+
       await metadata.stream("response", result.fullStream);
       const text = await result.text;
-      try {
-        const newMessage = await db
-          .insert(message)
-          .values({
-            chatId: payload.chatId,
-            content: text,
-            role: "assistant",
-          })
-          .returning();
-
-        if (newMessage && newMessage.length > 0) {
-          const messageId = newMessage[0]?.id;
-          if (!messageId) {
-            return "I'm sorry, I couldn't send the response.";
-          }
-          try {
-            await getProductInfoTask.batchTriggerAndWait(
-              productSearchResultsData.flatMap((result) =>
-                result.results.map((r) => ({
-                  payload: {
-                    messageId,
-                    url: r.url,
-                  },
-                })),
-              ),
-            );
-          } catch (error) {
-            console.error("Failed to insert products into database:", error);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to insert message into database:", error);
-      }
+      await db
+        .update(message)
+        .set({
+          content: text,
+        })
+        .where(eq(message.id, messageId));
 
       return {
         productSearchResultsData,
@@ -154,7 +169,7 @@ export const getProductInfoTask = schemaTask({
     }
 
     const { object: scrapeResult } = await generateObject({
-      model: openai("o3-mini"),
+      model: openai("gpt-4o-mini"),
       prompt: `Extract the product information from the following markdown: ${scrape.markdown}`,
       schema: z.object({
         product_name: z.string().describe("The name of the product"),
@@ -220,7 +235,7 @@ export const understendMessageTask = schemaTask({
   run: async (payload) => {
     const { message } = payload;
     const { object } = await generateObject({
-      model: openai("o3-mini"),
+      model: openai("gpt-4o-mini"),
       system:
         "You are a helpful assistant for a shopping assistant. You will be given a message from the user and you will need to understand the user's intent and return a JSON object with the intent and search queries for product reviews.",
       prompt: message,
@@ -251,7 +266,7 @@ export const searchProductReviewsTask = schemaTask({
     const allResults: TavilySearchResponse[] = [];
     for (const query of queries) {
       const searchResult = await tvly.search(query, {
-        max_results: 1,
+        max_results: 2,
         includeAnswer: true,
       });
       allResults.push(searchResult);
@@ -271,7 +286,12 @@ export const getProductQueriesTask = schemaTask({
     const { object } = await generateObject({
       model: openai("o3-mini"),
       prompt: `
-        You are a helpful assistant for a shopping assistant. You will be given a list of product reviews and you will need to extract the queries from the reviews that will be used to search for ecommerce stores with this product.
+        You are a helpful assistant for a shopping assistant. You will be given a list of product reviews
+        and you need to extract products from the reviews and write queries to search for ecommerce stores with the product.
+        Write queries in a way that will be used to search for ecommerce stores with the product, for example: "[product] ecommerce store"
+
+        Extract max 5 queries.
+        
         Product Reviews:
         ${reviews.map((review) => review).join("\n")}    
       `,

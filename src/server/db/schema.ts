@@ -174,6 +174,9 @@ export const messageRelations = relations(message, ({ one, many }) => ({
   tasks: many(task, {
     relationName: "tasks",
   }),
+  sources: many(sources, {
+    relationName: "sources",
+  }),
 }));
 
 export const product = createTable("product", {
@@ -200,6 +203,30 @@ export const product = createTable("product", {
 export const productRelations = relations(product, ({ one }) => ({
   message: one(message, {
     fields: [product.messageId],
+    references: [message.id],
+  }),
+}));
+
+export const sources = createTable("sources", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  messageId: uuid("message_id")
+    .notNull()
+    .references(() => message.id),
+  url: varchar("url", { length: 255 }).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});
+
+export const sourcesRelations = relations(sources, ({ one }) => ({
+  message: one(message, {
+    fields: [sources.messageId],
     references: [message.id],
   }),
 }));
